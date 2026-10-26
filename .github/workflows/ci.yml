@@ -1,0 +1,24 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Install server
+        run: npm --prefix server install
+      - name: Server unit tests
+        run: npm --prefix server test
+      - name: Build client
+        run: npm --prefix client install && npm --prefix client run build
+  docker:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t agritech .
