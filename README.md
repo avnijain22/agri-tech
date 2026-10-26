@@ -1,3 +1,4 @@
+
 # 🌾 AgriTech – Smart Farming Platform (MERN)
 
 Full-stack farm management app for farmers: farm profiles, crop & soil tracking, 7-day weather, pest-risk alerts,
