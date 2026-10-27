@@ -43,22 +43,38 @@ router.get('/farm/:farmId', asyncHandler(async (req, res) => {
 
   let cached = await WeatherData.findOne({ farm: farm._id });
 
-if (!cached || Date.now() - cached.fetchedAt.getTime() > CACHE_MS) {
-  try {
-    const payload = await fetchForecast(farm.latitude, farm.longitude);
-    cached = await WeatherData.findOneAndUpdate(
-      { farm: farm._id },
-      { payload, fetchedAt: new Date() },
-      { upsert: true, new: true }
-    );
-  } catch (err) {
-    if (!cached) throw err;
-    console.log('Using saved weather forecast because the weather API is unavailable.');
+  if (!cached || Date.now() - cached.fetchedAt.getTime() > CACHE_MS) {
+    try {
+      const payload = await fetchForecast(farm.latitude, farm.longitude);
+      cached = await WeatherData.findOneAndUpdate(
+        { farm: farm._id },
+        { payload, fetchedAt: new Date() },
+        { upsert: true, new: true }
+      );
+    } catch (err) {
+      if (!cached) {
+        // No saved forecast exists, so return a clear message.
+        return res.status(200).json({
+          farm: { id: farm._id, name: farm.name },
+          weatherUnavailable: true,
+          message: 'Live weather is temporarily unavailable. Please try again later.',
+          current: null,
+          daily: [],
+          pestRisks: [],
+          alerts: await Alert.find({ active: true }).sort('-createdAt').limit(10)
+        });
+      }
+
+      console.log('Using saved weather forecast because the weather API is unavailable.');
+    }
   }
-}
+
   const { current, daily } = cached.payload;
   res.json({
-    farm: { id: farm._id, name: farm.name }, fetchedAt: cached.fetchedAt, current, daily,
+    farm: { id: farm._id, name: farm.name },
+    fetchedAt: cached.fetchedAt,
+    current,
+    daily,
     pestRisks: pestRisks(current, daily),
     alerts: await Alert.find({ active: true }).sort('-createdAt').limit(10)
   });
