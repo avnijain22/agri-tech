@@ -29,7 +29,10 @@ export default function Weather() {
       </div>
       <Alert error={err} />
       {!w && !err && <div>{t('loading')}</div>}
-      {w && (
+      {w?.weatherUnavailable && (
+        <Alert error={w.message || 'Weather is temporarily unavailable. Please try again later.'} />
+      )}
+      {w && !w.weatherUnavailable && w.current && (
         <>
           <div className="row g-3 mb-3">
             {[['Temperature', `${w.current.temperature}°C`], ['Humidity', `${w.current.humidity}%`], ['Rain now', `${w.current.rain} mm`], ['Wind', `${w.current.wind} km/h`]].map(([k, v]) => (
