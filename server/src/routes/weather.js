@@ -6,7 +6,7 @@ const { protect, restrictTo } = require('../middleware/auth');
 const { asyncHandler } = require('../middleware/error');
 const { pestRisks } = require('../utils/agronomy');
 
-const CACHE_MS = 30 * 60 * 1000;
+const CACHE_MS = 24 * 60 * 60 * 1000;
 router.use(protect);
 
 async function fetchForecast(lat, lon) {
@@ -42,10 +42,20 @@ router.get('/farm/:farmId', asyncHandler(async (req, res) => {
   if (!farm) return res.status(404).json({ message: 'Farm not found' });
 
   let cached = await WeatherData.findOne({ farm: farm._id });
-  if (!cached || Date.now() - cached.fetchedAt.getTime() > CACHE_MS) {
+
+if (!cached || Date.now() - cached.fetchedAt.getTime() > CACHE_MS) {
+  try {
     const payload = await fetchForecast(farm.latitude, farm.longitude);
-    cached = await WeatherData.findOneAndUpdate({ farm: farm._id }, { payload, fetchedAt: new Date() }, { upsert: true, new: true });
+    cached = await WeatherData.findOneAndUpdate(
+      { farm: farm._id },
+      { payload, fetchedAt: new Date() },
+      { upsert: true, new: true }
+    );
+  } catch (err) {
+    if (!cached) throw err;
+    console.log('Using saved weather forecast because the weather API is unavailable.');
   }
+}
   const { current, daily } = cached.payload;
   res.json({
     farm: { id: farm._id, name: farm.name }, fetchedAt: cached.fetchedAt, current, daily,
