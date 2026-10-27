@@ -15,8 +15,16 @@ async function fetchForecast(lat, lon) {
     '&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m' +
     '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max' +
     '&timezone=auto&forecast_days=7';
-  const r = await fetch(url);
-  if (!r.ok) throw Object.assign(new Error('Weather service is unavailable. Try again later.'), { status: 502 });
+    const r = await fetch(url);
+
+    if (!r.ok) {
+      const details = await r.text();
+      console.error('Open-Meteo error:', r.status, details);
+      throw Object.assign(
+        new Error('Weather service is unavailable. Try again later.'),
+        { status: 502 }
+      );
+    }
   const j = await r.json();
   return {
     current: { temperature: j.current.temperature_2m, humidity: j.current.relative_humidity_2m, rain: j.current.precipitation, wind: j.current.wind_speed_10m },
