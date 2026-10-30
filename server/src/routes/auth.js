@@ -24,7 +24,7 @@ router.post('/login',
   validate,
   asyncHandler(async (req, res) => {
     const user = await User.findOne({ email: req.body.email });
-    if (!user || !(await user.matches(req.body.password)) || !user.active)
+    if (!user || !(await user.matchPassword(req.body.password)))
       return res.status(401).json({ message: 'Incorrect email or password' });
     res.json({ token: sign(user), user: publicUser(user) });
   }));
