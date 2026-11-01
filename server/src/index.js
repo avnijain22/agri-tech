@@ -25,6 +25,8 @@ app.use('/api/farms', require('./routes/farms'));
 app.use('/api/crops', require('./routes/crops'));
 app.use('/api/resources', require('./routes/resources'));
 app.use('/api/orders', require('./routes/orders'));
+app.use('/api/bookings', require('./routes/bookingRoutes'));
+app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/weather', require('./routes/weather'));
 app.use('/api/posts', require('./routes/posts'));
 app.use('/api/admin', require('./routes/admin'));
