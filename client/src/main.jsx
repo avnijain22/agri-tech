@@ -6,6 +6,7 @@ import './styles.css';
 import { AppProvider, useApp } from './AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Register from './pages/Register';
 
 // Lazy-loaded pages (code splitting)
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -30,7 +31,7 @@ function App() {
     <Suspense fallback={<div className="p-5 text-center">Loading…</div>}>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Login register />} />
+        <Route path="/register" element={<Register />} />
         <Route element={<Guard><Layout /></Guard>}>
           <Route index element={<Dashboard />} />
           <Route path="farms" element={<Farms />} />
