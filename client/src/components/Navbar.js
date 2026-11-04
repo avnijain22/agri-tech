@@ -28,12 +28,32 @@ const AppNavbar = () => {
                 <Nav.Link as={Link} to="/">
                   Dashboard
                 </Nav.Link>
+
                 <Nav.Link as={Link} to="/farms">
                   Farms
                 </Nav.Link>
+
                 <Nav.Link as={Link} to="/crops">
                   Crops
                 </Nav.Link>
+
+                <Nav.Link as={Link} to="/weather">
+                  Weather
+                </Nav.Link>
+
+                <Nav.Link as={Link} to="/resources">
+                  Resources
+                </Nav.Link>
+
+                <Nav.Link as={Link} to="/orders">
+                  My Orders
+                </Nav.Link>
+
+                {user.role === "admin" && (
+                  <Nav.Link as={Link} to="/admin">
+                    Admin
+                  </Nav.Link>
+                )}
               </>
             )}
           </Nav>
@@ -58,6 +78,7 @@ const AppNavbar = () => {
                 <Nav.Link as={Link} to="/login">
                   Login
                 </Nav.Link>
+
                 <Nav.Link as={Link} to="/register">
                   Register
                 </Nav.Link>
