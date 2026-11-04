@@ -1,4 +1,5 @@
 const Farm = require("../models/Farm");
+const Crop = require("../models/Crop");
 
 exports.createFarm = async (req, res, next) => {
   try {
@@ -31,8 +32,18 @@ exports.updateFarm = async (req, res, next) => {
 
 exports.deleteFarm = async (req, res, next) => {
   try {
-    const farm = await Farm.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+    const farm = await Farm.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user._id
+    });
+
     if (!farm) return res.status(404).json({ message: "Farm not found" });
-    res.json({ message: "Farm deleted" });
-  } catch (err) { next(err); }
+
+    await Crop.deleteMany({ farm: farm._id }); // remove this farm's crops too
+
+    res.json({ message: "Farm and its crops deleted" });
+  } catch (err) {
+    next(err);
+  }
 };
+

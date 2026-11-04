@@ -1,92 +1,379 @@
-import { useState } from 'react';
-import api, { errMsg } from '../api/client';
-import { useApp } from '../AuthContext';
-import { useList, Form, Empty, Alert, dateInput } from '../components/ui';
 
-export default function Crops() {
-  const { t } = useApp();
-  const { data, error, reload } = useList('/crops');
-  const farms = useList('/farms').data || [];
-  const [editing, setEditing] = useState(null);
-  const [analysis, setAnalysis] = useState(null);
-  const [err, setErr] = useState('');
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Container,
+  Table,
+  Button,
+  Modal,
+  Form,
+  Alert,
+  Spinner,
+  Badge,
+  Row,
+  Col,
+} from "react-bootstrap";
+import api, { getErrorMessage } from "../api/axios";
 
-  const fields = [
-    { name: 'name', label: 'Crop', required: true },
-    { name: 'farm', label: 'Farm', type: 'select', required: true, options: farms.map(f => ({ value: f._id, label: f.name })) },
-    { name: 'variety', label: 'Variety' },
-    { name: 'season', label: 'Season', type: 'select', options: ['kharif', 'rabi', 'zaid'] },
-    { name: 'status', label: 'Status', type: 'select', options: ['planned', 'growing', 'harvested', 'failed'] },
-    { name: 'sowingDate', label: 'Sowing date', type: 'date' },
-    { name: 'expectedHarvest', label: 'Expected harvest', type: 'date' },
-    { name: 'expectedYield', label: 'Expected yield (quintal)', type: 'number', step: 'any' },
-    { name: 'actualYield', label: 'Actual yield (quintal)', type: 'number', step: 'any' },
-    { name: 'ph', label: 'Soil pH', type: 'number', step: 'any' },
-    { name: 'nitrogen', label: 'Nitrogen (kg/ha)', type: 'number' },
-    { name: 'phosphorus', label: 'Phosphorus (kg/ha)', type: 'number' },
-    { name: 'potassium', label: 'Potassium (kg/ha)', type: 'number' },
-    { name: 'organicCarbon', label: 'Organic carbon (%)', type: 'number', step: 'any' }
-  ];
-  const soilKeys = ['ph', 'nitrogen', 'phosphorus', 'potassium', 'organicCarbon'];
+const STAGES = ["sowing", "growing", "flowering", "harvesting", "harvested"];
+const TYPES = ["cereal", "pulse", "vegetable", "fruit", "oilseed", "other"];
 
-  const toForm = c => ({ ...c, farm: c.farm?._id || c.farm, sowingDate: dateInput(c.sowingDate), expectedHarvest: dateInput(c.expectedHarvest), ...(c.soil || {}) });
-  const save = async v => {
-    const body = { ...v, soil: Object.fromEntries(soilKeys.filter(k => v[k] !== '' && v[k] != null).map(k => [k, Number(v[k])])) };
-    soilKeys.forEach(k => delete body[k]);
-    ['sowingDate', 'expectedHarvest', 'expectedYield', 'actualYield'].forEach(k => { if (body[k] === '') delete body[k]; });
-    if (editing === 'new') await api.post('/crops', body); else await api.put(`/crops/${editing._id}`, body);
-    setEditing(null); reload();
+const stageColor = {
+  sowing: "secondary",
+  growing: "success",
+  flowering: "warning",
+  harvesting: "primary",
+  harvested: "dark",
+};
+
+const emptyForm = {
+  farm: "",
+  cropName: "",
+  cropType: "cereal",
+  sowingTime: "",
+  harvestingTime: "",
+  growthStage: "sowing",
+  notes: "",
+};
+
+const toDateInput = (d) => (d ? String(d).slice(0, 10) : "");
+const showDate = (d) => (d ? new Date(d).toLocaleDateString() : "-");
+
+const Crops = () => {
+  const [crops, setCrops] = useState([]);
+  const [farms, setFarms] = useState([]);
+  const [filterFarm, setFilterFarm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [show, setShow] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const [farmRes, cropRes] = await Promise.all([
+        api.get("/farms"),
+        api.get("/crops", {
+          params: filterFarm ? { farm: filterFarm } : {},
+        }),
+      ]);
+
+      setFarms(farmRes.data);
+      setCrops(cropRes.data);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [filterFarm]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const openAdd = () => {
+    setEditingId(null);
+    setForm({
+      ...emptyForm,
+      farm: filterFarm || (farms[0] && farms[0]._id) || "",
+    });
+    setFormError("");
+    setShow(true);
   };
-  const remove = async c => { if (confirm(`Delete ${c.name}?`)) { await api.delete(`/crops/${c._id}`); reload(); } };
-  const analyze = async c => {
-    try { const r = await api.get(`/crops/${c._id}/analysis`); setAnalysis({ crop: c.name, ...r.data }); setErr(''); } catch (e) { setErr(errMsg(e)); }
+
+  const openEdit = (c) => {
+    setEditingId(c._id);
+    setForm({
+      farm: c.farm ? c.farm._id : "",
+      cropName: c.cropName,
+      cropType: c.cropType || "other",
+      sowingTime: toDateInput(c.sowingTime),
+      harvestingTime: toDateInput(c.harvestingTime),
+      growthStage: c.growthStage,
+      notes: c.notes || "",
+    });
+    setFormError("");
+    setShow(true);
   };
-  const log = async c => {
-    const action = prompt('Activity (e.g. irrigated, sprayed, weeded):'); if (!action) return;
-    await api.post(`/crops/${c._id}/activity`, { action, note: prompt('Note (optional):') || '' }); reload();
+
+  const handleChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setFormError("");
+
+    const payload = {
+      ...form,
+      sowingTime: form.sowingTime || null,
+      harvestingTime: form.harvestingTime || null,
+    };
+
+    try {
+      if (editingId) {
+        await api.put(`/crops/${editingId}`, payload);
+      } else {
+        await api.post("/crops", payload);
+      }
+
+      setShow(false);
+      await load();
+    } catch (err) {
+      setFormError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const handleDelete = async (c) => {
+    if (!window.confirm(`Delete crop "${c.cropName}"?`)) return;
+
+    try {
+      await api.delete(`/crops/${c._id}`);
+      await load();
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  };
+
+  if (loading) {
+    return (
+      <Container className="mt-4">
+        <Spinner animation="border" />
+      </Container>
+    );
+  }
 
   return (
-    <>
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h2 className="m-0">{t('crops')}</h2>
-        {!editing && <button className="btn btn-primary" disabled={!farms.length} onClick={() => setEditing('new')}>+ {t('add')}</button>}
-      </div>
-      {!farms.length && <div className="alert alert-warning py-2">Add a farm first, then you can add crops to it.</div>}
-      <Alert error={error || err} />
-      {editing && <div className="panel mb-3"><Form fields={fields} initial={editing === 'new' ? { season: 'kharif', status: 'planned' } : toForm(editing)} onSubmit={save} onCancel={() => setEditing(null)} submitLabel={t('save')} /></div>}
-      {analysis && (
-        <div className="panel mb-3">
-          <div className="d-flex justify-content-between"><h5>Soil health: {analysis.crop}</h5><button className="btn-close" onClick={() => setAnalysis(null)} aria-label="Close" /></div>
-          {analysis.healthScore === null ? <p className="text-muted">Enter soil test values (edit the crop) to get an analysis.</p> : (
-            <>
-              <p className="mb-2">Score <strong>{analysis.healthScore}/100</strong> – {analysis.rating}</p>
-              <div className="d-flex flex-wrap gap-2 mb-2">{analysis.readings.map(r => (
-                <span key={r.key} className={`badge ${r.level === 'optimal' ? 'text-bg-success' : 'text-bg-warning'}`}>{r.label}: {r.value} ({r.level})</span>))}</div>
-              <ul className="mb-0">{analysis.advice.map(a => <li key={a}>{a}</li>)}</ul>
-            </>
-          )}
-        </div>
+    <Container className="mt-4">
+      <Row className="align-items-center mb-3 g-2">
+        <Col>
+          <h3 className="mb-0">My Crops</h3>
+        </Col>
+
+        <Col xs="auto">
+          <Form.Select
+            value={filterFarm}
+            onChange={(e) => setFilterFarm(e.target.value)}
+          >
+            <option value="">All farms</option>
+            {farms.map((f) => (
+              <option key={f._id} value={f._id}>
+                {f.farmName}
+              </option>
+            ))}
+          </Form.Select>
+        </Col>
+
+        <Col xs="auto">
+          <Button
+            variant="success"
+            onClick={openAdd}
+            disabled={farms.length === 0}
+          >
+            + Add Crop
+          </Button>
+        </Col>
+      </Row>
+
+      {error && <Alert variant="danger">{error}</Alert>}
+
+      {farms.length === 0 ? (
+        <Alert variant="warning">
+          You need a farm before adding crops.{" "}
+          <Link to="/farms">Add a farm first</Link>.
+        </Alert>
+      ) : crops.length === 0 ? (
+        <Alert variant="info">
+          No crops yet. Click "Add Crop" to start tracking.
+        </Alert>
+      ) : (
+        <Table striped bordered hover responsive>
+          <thead>
+            <tr>
+              <th>Crop</th>
+              <th>Farm</th>
+              <th>Type</th>
+              <th>Sowing</th>
+              <th>Harvest</th>
+              <th>Stage</th>
+              <th style={{ width: 160 }}>Actions</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {crops.map((c) => (
+              <tr key={c._id}>
+                <td>{c.cropName}</td>
+                <td>{c.farm ? c.farm.farmName : "-"}</td>
+                <td>{c.cropType || "-"}</td>
+                <td>{showDate(c.sowingTime)}</td>
+                <td>{showDate(c.harvestingTime)}</td>
+                <td>
+                  <Badge bg={stageColor[c.growthStage]}>
+                    {c.growthStage}
+                  </Badge>
+                </td>
+                <td>
+                  <Button
+                    size="sm"
+                    variant="outline-primary"
+                    className="me-2"
+                    onClick={() => openEdit(c)}
+                  >
+                    Edit
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline-danger"
+                    onClick={() => handleDelete(c)}
+                  >
+                    Delete
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
       )}
-      {data && !data.length && !editing && <Empty>{t('noCrops')}</Empty>}
-      <div className="row g-3">
-        {data?.map(c => (
-          <div key={c._id} className="col-md-6 col-xl-4">
-            <div className="panel h-100">
-              <div className="d-flex justify-content-between"><h5>{c.name}</h5><span className="badge text-bg-secondary align-self-start">{c.status}</span></div>
-              <div className="small text-muted mb-2">{c.farm?.name} · {c.season} {c.variety && `· ${c.variety}`}</div>
-              <div className="small">Sown: {dateInput(c.sowingDate) || '—'} · Harvest: {dateInput(c.expectedHarvest) || '—'}</div>
-              {c.activityLog?.length > 0 && <div className="small mt-2">Last: {c.activityLog.at(-1).action}</div>}
-              <div className="mt-3 d-flex flex-wrap gap-2">
-                <button className="btn btn-sm btn-outline-primary" onClick={() => analyze(c)}>Soil analysis</button>
-                <button className="btn btn-sm btn-outline-primary" onClick={() => log(c)}>Log activity</button>
-                <button className="btn btn-sm btn-outline-secondary" onClick={() => setEditing(c)}>{t('edit')}</button>
-                <button className="btn btn-sm btn-outline-danger" onClick={() => remove(c)}>{t('delete')}</button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
+
+      <Modal show={show} onHide={() => setShow(false)}>
+        <Form onSubmit={handleSubmit}>
+          <Modal.Header closeButton>
+            <Modal.Title>
+              {editingId ? "Edit Crop" : "Add Crop"}
+            </Modal.Title>
+          </Modal.Header>
+
+          <Modal.Body>
+            {formError && <Alert variant="danger">{formError}</Alert>}
+
+            <Form.Group className="mb-3">
+              <Form.Label>Farm</Form.Label>
+              <Form.Select
+                name="farm"
+                value={form.farm}
+                onChange={handleChange}
+                disabled={!!editingId}
+                required
+              >
+                {farms.map((f) => (
+                  <option key={f._id} value={f._id}>
+                    {f.farmName}
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Crop name</Form.Label>
+              <Form.Control
+                name="cropName"
+                value={form.cropName}
+                onChange={handleChange}
+                placeholder="e.g. Wheat"
+                required
+              />
+            </Form.Group>
+
+            <Row>
+              <Col>
+                <Form.Group className="mb-3">
+                  <Form.Label>Type</Form.Label>
+                  <Form.Select
+                    name="cropType"
+                    value={form.cropType}
+                    onChange={handleChange}
+                  >
+                    {TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+
+              <Col>
+                <Form.Group className="mb-3">
+                  <Form.Label>Growth stage</Form.Label>
+                  <Form.Select
+                    name="growthStage"
+                    value={form.growthStage}
+                    onChange={handleChange}
+                  >
+                    {STAGES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            <Row>
+              <Col>
+                <Form.Group className="mb-3">
+                  <Form.Label>Sowing date</Form.Label>
+                  <Form.Control
+                    type="date"
+                    name="sowingTime"
+                    value={form.sowingTime}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+              </Col>
+
+              <Col>
+                <Form.Group className="mb-3">
+                  <Form.Label>Expected harvest</Form.Label>
+                  <Form.Control
+                    type="date"
+                    name="harvestingTime"
+                    value={form.harvestingTime}
+                    onChange={handleChange}
+                  />
+                </Form.Group>
+              </Col>
+            </Row>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Notes</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={2}
+                name="notes"
+                value={form.notes}
+                onChange={handleChange}
+              />
+            </Form.Group>
+          </Modal.Body>
+
+          <Modal.Footer>
+            <Button
+              variant="secondary"
+              onClick={() => setShow(false)}
+            >
+              Cancel
+            </Button>
+
+            <Button
+              type="submit"
+              variant="success"
+              disabled={saving}
+            >
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </Modal.Footer>
+        </Form>
+      </Modal>
+    </Container>
   );
-}
+};
+
+export default Crops;
