@@ -15,18 +15,29 @@ const cropSchema = new mongoose.Schema(
     cropName: {
       type: String,
       required: true,
+      trim: true,
     },
-    sowingDate: {
+    cropType: {
+      type: String,
+      enum: ["cereal", "pulse", "vegetable", "fruit", "oilseed", "other"],
+      default: "other",
+    },
+    sowingTime: {
       type: Date,
       required: true,
     },
-    expectedHarvestDate: {
+    harvestingTime: {
       type: Date,
       required: true,
     },
     growthStage: {
       type: String,
-      default: "Sown",
+      enum: ["sowing", "growing", "flowering", "harvesting", "harvested"],
+      default: "sowing",
+    },
+    notes: {
+      type: String,
+      default: "",
     },
   },
   { timestamps: true }

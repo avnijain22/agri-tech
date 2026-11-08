@@ -65,3 +65,7 @@ agritech/
 │   └── package.json
 │
 └── README.md
+
+## Demo Video
+
+[Watch AgriTech Demo](https://drive.google.com/file/d/1yakhHhEewwzZHXiiMecMAUPYzmfPppKb/view?usp=share_link)
